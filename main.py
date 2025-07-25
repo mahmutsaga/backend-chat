@@ -52,9 +52,8 @@ async def generate_embed(data: FirmInput):
     
     base_url = data.baseUrl if data.baseUrl else ""
 
-    embed_code = f'''
+    embed_code = f"""
 <style>
-  /* Plutajuća chat ikonica */
   #chat-toggle-btn-{embed_id} {{
     position: fixed;
     bottom: 30px;
@@ -78,7 +77,6 @@ async def generate_embed(data: FirmInput):
     background-color: #0056b3;
   }}
 
-  /* Chat container - skriven po defaultu */
   #chat-container-{embed_id} {{
     font-family: Arial, sans-serif;
     max-width: 400px;
@@ -99,15 +97,11 @@ async def generate_embed(data: FirmInput):
     transition: max-height 0.4s ease, opacity 0.4s ease, transform 0.4s ease;
     z-index: 9998;
   }}
-
-  /* Kad je chat otvoren */
   #chat-container-{embed_id}.open {{
     max-height: 450px;
     opacity: 1;
     transform: translateY(0);
   }}
-
-  /* Chat history */
   #chat-history-{embed_id} {{
     flex-grow: 1;
     padding: 15px;
@@ -117,8 +111,6 @@ async def generate_embed(data: FirmInput):
     flex-direction: column;
     gap: 8px;
   }}
-
-  /* Poruke korisnika */
   .msg-user-{embed_id} {{
     align-self: flex-end;
     background-color: #007bff;
@@ -129,8 +121,6 @@ async def generate_embed(data: FirmInput):
     word-wrap: break-word;
     box-shadow: 0 1px 4px rgba(0,0,0,0.1);
   }}
-
-  /* Poruke AI */
   .msg-ai-{embed_id} {{
     align-self: flex-start;
     background-color: #e9ecef;
@@ -141,16 +131,12 @@ async def generate_embed(data: FirmInput):
     word-wrap: break-word;
     box-shadow: 0 1px 4px rgba(0,0,0,0.1);
   }}
-
-  /* Input wrapper */
   #chat-input-wrapper-{embed_id} {{
     display: flex;
     padding: 12px;
     border-top: 1px solid #eee;
     background-color: white;
   }}
-
-  /* Input polje */
   #user-input-{embed_id} {{
     flex-grow: 1;
     padding: 12px 15px;
@@ -163,8 +149,6 @@ async def generate_embed(data: FirmInput):
   #user-input-{embed_id}:focus {{
     border-color: #007bff;
   }}
-
-  /* Dugme Pošalji */
   #send-btn-{embed_id} {{
     padding: 12px 25px;
     background-color: #007bff;
@@ -179,23 +163,27 @@ async def generate_embed(data: FirmInput):
   #send-btn-{embed_id}:hover {{
     background-color: #0056b3;
   }}
+  .loading-spinner-{embed_id} {{
+    width: 20px;
+    height: 20px;
+    border: 3px solid #e0e0e0;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin-{embed_id} 1s linear infinite;
+    margin: 5px 0;
+  }}
+  @keyframes spin-{embed_id} {{
+    0% {{ transform: rotate(0deg); }}
+    100% {{ transform: rotate(360deg); }}
+  }}
 </style>
 
-<!-- Ikonica za otvaranje/zakljucavanje chat-a -->
 <button id="chat-toggle-btn-{embed_id}" aria-label="Otvori chat">💬</button>
 
-<!-- Chat kontejner -->
 <div id="chat-container-{embed_id}">
-  <div id="chat-history-{embed_id}">
-    <!-- Poruke će se prikazivati ovde -->
-  </div>
+  <div id="chat-history-{embed_id}"></div>
   <div id="chat-input-wrapper-{embed_id}">
-    <input
-      type="text"
-      id="user-input-{embed_id}"
-      placeholder="Unesite pitanje..."
-      autocomplete="off"
-    />
+    <input type="text" id="user-input-{embed_id}" placeholder="Unesite pitanje..." autocomplete="off" />
     <button id="send-btn-{embed_id}">Pošalji</button>
   </div>
 </div>
@@ -207,14 +195,47 @@ async def generate_embed(data: FirmInput):
     const chatHistory = document.getElementById('chat-history-{embed_id}');
     const userInput = document.getElementById('user-input-{embed_id}');
     const sendBtn = document.getElementById('send-btn-{embed_id}');
-    const firmText = "{escaped_js}";
+    const firmText = `{escaped_js}`;
     const baseUrl = "{base_url}";
 
-    // Toggle otvaranje/zatvaranje chata
-    toggleBtn.addEventListener('click', () => {{
+    toggleBtn.addEventListener('click', async () => {{
       container.classList.toggle('open');
-      if(container.classList.contains('open')) {{
+      if (container.classList.contains('open')) {{
         userInput.focus();
+
+        if (!container.dataset.greeted) {{
+          container.dataset.greeted = "true";
+          const welcomeMessage = "Pozdrav! Ja sam vaš AI asistent. Postavite mi pitanje vezano za firmu.";
+
+          const loadingDiv = document.createElement("div");
+          loadingDiv.className = "msg-ai-{embed_id}";
+          loadingDiv.innerHTML = `<div class="loading-spinner-{embed_id}"></div>`;
+          chatHistory.appendChild(loadingDiv);
+          chatHistory.scrollTop = chatHistory.scrollHeight;
+
+          try {{
+            const response = await fetch(`${{baseUrl}}/ask`, {{
+              method: "POST",
+              headers: {{ "Content-Type": "application/json" }},
+              body: JSON.stringify({{ question: welcomeMessage, firmText: firmText }})
+            }});
+            const data = await response.json();
+            loadingDiv.remove();
+
+            if (!response.ok) {{
+              const errorText = data.detail || "Greška u odgovoru.";
+              throw new Error(errorText);
+            }}
+
+            chatHistory.innerHTML += `<div class="msg-ai-{embed_id}">${{data.answer}}</div>`;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+          }} catch (error) {{
+            loadingDiv.remove();
+            console.error('Greška:', error);
+            chatHistory.innerHTML += `<div class="msg-ai-{embed_id}">Greška: ${{error.message}}</div>`;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+          }}
+        }}
       }}
     }});
 
@@ -232,6 +253,11 @@ async def generate_embed(data: FirmInput):
 
       userInput.value = '';
       chatHistory.innerHTML += `<div class="msg-user-{embed_id}">${{question}}</div>`;
+
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "msg-ai-{embed_id}";
+      loadingDiv.innerHTML = `<div class="loading-spinner-{embed_id}"></div>`;
+      chatHistory.appendChild(loadingDiv);
       chatHistory.scrollTop = chatHistory.scrollHeight;
 
       try {{
@@ -240,20 +266,18 @@ async def generate_embed(data: FirmInput):
           headers: {{ "Content-Type": "application/json" }},
           body: JSON.stringify({{ question: question, firmText: firmText }})
         }});
+        const data = await response.json();
+        loadingDiv.remove();
 
         if (!response.ok) {{
-          let errorText = "Greška u odgovoru.";
-          try {{
-            const errorData = await response.json();
-            errorText = errorData.detail || errorText;
-          }} catch(e) {{}}
+          const errorText = data.detail || "Greška u odgovoru.";
           throw new Error(errorText);
         }}
 
-        const data = await response.json();
         chatHistory.innerHTML += `<div class="msg-ai-{embed_id}">${{data.answer}}</div>`;
         chatHistory.scrollTop = chatHistory.scrollHeight;
       }} catch (error) {{
+        loadingDiv.remove();
         console.error('Greška:', error);
         chatHistory.innerHTML += `<div class="msg-ai-{embed_id}">Greška: ${{error.message}}</div>`;
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -261,7 +285,9 @@ async def generate_embed(data: FirmInput):
     }}
   }});
 </script>
-'''
+"""
+
+
 
     backend_code = f'''
 # Backend kod za referencu - koristi isti main.py kao i ovaj
@@ -281,7 +307,7 @@ def ask(query: Query):
         },
         {
             "role": "user",
-            "content": f"Opis firme:\\n{query.firmText}\\n\\nPitanje:\\n{query.question}\\nOdgovori jasno i kratko."
+            "content": f"Opis firme:\\n{query.firmText}\\n\\nPitanje:\\n{query.question}\\nOdgovori jasno i kratko. Ako je pitanje postavljeno na nekom drugom jeziku odgovori koristeci isti jezik kao sto je postavljeno pitanje."
         }
     ]
 
